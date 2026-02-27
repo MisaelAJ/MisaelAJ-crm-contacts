@@ -4,11 +4,13 @@ import {
     FolderIcon,
     PlusIcon,
     SearchIcon,
-    FilterIcon,
     PencilIcon,
     TrashIcon,
     ArrowUpIcon,
     ArrowDownIcon,
+    UserIcon,
+    XIcon,
+    LogOutIcon,
 } from "lucide-vue-next";
 import type { Contact } from "@/types";
 import api from "@/api/axios";
@@ -22,6 +24,20 @@ const currentPage = ref(1);
 const perPage = ref(10);
 const sort = ref("created_at");
 const dir = ref("desc");
+
+const isModalOpen = ref(false);
+const isEditing = ref(false);
+const formErrors = ref<Record<string, string[]>>({});
+
+const currentContact = ref<Contact>({
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+    tags: [] as string[],
+    notes: "",
+});
+const tagsInput = ref("");
 
 let searchTimeout: ReturnType<typeof setTimeout>;
 
@@ -67,7 +83,8 @@ const fetchContacts = async (query: string) => {
     }
 };
 
-const formatDate = (dateString: string) => {
+const formatDate = (dateString?: string) => {
+    if (!dateString) return "";
     const date = new Date(dateString);
     return date.toLocaleDateString("es-MX", {
         year: "numeric",
@@ -79,6 +96,92 @@ const formatDate = (dateString: string) => {
 onMounted(() => {
     fetchContacts(searchQuery.value);
 });
+
+const openModal = (contact: Contact | null = null) => {
+    formErrors.value = {};
+    if (contact) {
+        isEditing.value = true;
+        currentContact.value = { ...contact };
+        // Ensure tags is array
+        if (typeof currentContact.value.tags === "string") {
+            try {
+                currentContact.value.tags = JSON.parse(
+                    currentContact.value.tags,
+                );
+            } catch {
+                currentContact.value.tags = [];
+            }
+        } else if (!currentContact.value.tags) {
+            currentContact.value.tags = [];
+        }
+        tagsInput.value = (currentContact.value.tags as string[]).join(", ");
+    } else {
+        isEditing.value = false;
+        currentContact.value = {
+            name: "",
+            email: "",
+            phone: "",
+            company: "",
+            tags: [],
+            notes: "",
+        };
+        tagsInput.value = "";
+    }
+    isModalOpen.value = true;
+};
+
+const closeModal = () => {
+    isModalOpen.value = false;
+};
+
+const saveContact = async () => {
+    formErrors.value = {};
+    const tagsArray = tagsInput.value
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+
+    currentContact.value.tags = tagsArray;
+
+    try {
+        if (isEditing.value && currentContact.value.id) {
+            await api.put(
+                `/contacts/${currentContact.value.id}`,
+                currentContact.value,
+            );
+        } else {
+            await api.post("/contacts", currentContact.value);
+        }
+        closeModal();
+        fetchContacts(searchQuery.value);
+    } catch (error: any) {
+        if (error.response && error.response.status === 422) {
+            formErrors.value = error.response.data.errors;
+        } else {
+            console.error("Error saving contact", error);
+        }
+    }
+};
+
+const deleteContact = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this contact?")) return;
+    try {
+        await api.delete(`/contacts/${id}`);
+        fetchContacts(searchQuery.value);
+    } catch (error) {
+        console.error("Error deleting contact", error);
+    }
+};
+
+const isDropdownOpen = ref(false);
+
+const logout = async () => {
+    try {
+        await api.post("/logout");
+    } catch (error) {
+        console.error("Logout failed", error);
+    }
+};
 </script>
 
 <template>
@@ -96,10 +199,33 @@ onMounted(() => {
                         </span>
                         <span>CRM Contact</span>
                     </div>
-                    <div
-                        class="size-8 rounded-full bg-gray-800 flex items-center justify-center text-[10px] text-white font-bold cursor-pointer hover:ring-4 hover:ring-gray-100 transition-all"
-                    >
-                        M
+                    <div class="relative">
+                        <!-- Click outside overlay -->
+                        <div
+                            v-if="isDropdownOpen"
+                            @click="isDropdownOpen = false"
+                            class="fixed inset-0 z-40"
+                        ></div>
+
+                        <div
+                            @click="isDropdownOpen = !isDropdownOpen"
+                            class="relative z-50 size-8 rounded-full bg-gray-800 flex items-center justify-center text-[10px] text-white font-bold cursor-pointer hover:ring-4 hover:ring-gray-100 transition-all"
+                        >
+                            <UserIcon :size="16" class="text-white" />
+                        </div>
+
+                        <div
+                            v-if="isDropdownOpen"
+                            class="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 overflow-hidden transform origin-top-right transition-all"
+                        >
+                            <button
+                                @click="logout"
+                                class="w-full text-left px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                            >
+                                <LogOutIcon :size="16" />
+                                Logout
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -111,6 +237,7 @@ onMounted(() => {
                     Contacts
                 </h1>
                 <button
+                    @click="openModal()"
                     class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 shadow-sm active:scale-95"
                 >
                     <span class="text-lg">
@@ -253,6 +380,7 @@ onMounted(() => {
                                     class="flex justify-end gap-1 opacity-100 transition-opacity"
                                 >
                                     <button
+                                        @click="openModal(contact)"
                                         class="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-gray-800 rounded-md transition-all"
                                     >
                                         <span class="text-xl">
@@ -260,6 +388,7 @@ onMounted(() => {
                                         </span>
                                     </button>
                                     <button
+                                        @click="deleteContact(contact.id!)"
                                         class="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-md transition-all"
                                     >
                                         <span class="text-xl">
@@ -341,6 +470,165 @@ onMounted(() => {
                         Next
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Contact Modal -->
+        <div
+            v-if="isModalOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            @click.self="closeModal"
+        >
+            <div
+                class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden transform transition-all"
+            >
+                <div
+                    class="flex items-center justify-between px-6 py-4 border-b border-slate-100"
+                >
+                    <h3 class="text-lg font-bold text-gray-800">
+                        {{ isEditing ? "Edit Contact" : "New Contact" }}
+                    </h3>
+                    <button
+                        @click="closeModal"
+                        class="text-slate-400 hover:text-gray-600 transition-colors"
+                    >
+                        <XIcon :size="20" />
+                    </button>
+                </div>
+
+                <form @submit.prevent="saveContact" class="p-6">
+                    <div class="space-y-4">
+                        <div>
+                            <label
+                                class="block tracking-tight text-sm font-bold text-gray-700 mb-1"
+                                >Name <span class="text-red-500">*</span></label
+                            >
+                            <input
+                                v-model="currentContact.name"
+                                type="text"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm focus:border-gray-800 focus:bg-white focus:ring-0 outline-none transition-all"
+                                required
+                            />
+                            <p
+                                v-if="formErrors.name"
+                                class="mt-1 text-xs text-red-500 font-medium"
+                            >
+                                {{ formErrors.name[0] }}
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label
+                                    class="block tracking-tight text-sm font-bold text-gray-700 mb-1"
+                                    >Email
+                                    <span class="text-red-500">*</span></label
+                                >
+                                <input
+                                    v-model="currentContact.email"
+                                    type="email"
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm focus:border-gray-800 focus:bg-white focus:ring-0 outline-none transition-all"
+                                />
+                                <p
+                                    v-if="formErrors.email"
+                                    class="mt-1 text-xs text-red-500 font-medium"
+                                >
+                                    {{ formErrors.email[0] }}
+                                </p>
+                            </div>
+                            <div>
+                                <label
+                                    class="block tracking-tight text-sm font-bold text-gray-700 mb-1"
+                                    >Phone</label
+                                >
+                                <input
+                                    v-model="currentContact.phone"
+                                    type="text"
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm focus:border-gray-800 focus:bg-white focus:ring-0 outline-none transition-all"
+                                />
+                                <p
+                                    v-if="formErrors.phone"
+                                    class="mt-1 text-xs text-red-500 font-medium"
+                                >
+                                    {{ formErrors.phone[0] }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label
+                                class="block tracking-tight text-sm font-bold text-gray-700 mb-1"
+                                >Company</label
+                            >
+                            <input
+                                v-model="currentContact.company"
+                                type="text"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm focus:border-gray-800 focus:bg-white focus:ring-0 outline-none transition-all"
+                            />
+                            <p
+                                v-if="formErrors.company"
+                                class="mt-1 text-xs text-red-500 font-medium"
+                            >
+                                {{ formErrors.company[0] }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <label
+                                class="block tracking-tight text-sm font-bold text-gray-700 mb-1"
+                                >Tags (comma separated)</label
+                            >
+                            <input
+                                v-model="tagsInput"
+                                type="text"
+                                placeholder="client, urgent, new"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm focus:border-gray-800 focus:bg-white focus:ring-0 outline-none transition-all"
+                            />
+                            <p
+                                v-if="formErrors.tags"
+                                class="mt-1 text-xs text-red-500 font-medium"
+                            >
+                                {{ formErrors.tags[0] }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <label
+                                class="block tracking-tight text-sm font-bold text-gray-700 mb-1"
+                                >Notes</label
+                            >
+                            <textarea
+                                v-model="currentContact.notes"
+                                rows="3"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm focus:border-gray-800 focus:bg-white focus:ring-0 outline-none transition-all block resize-none"
+                            ></textarea>
+                            <p
+                                v-if="formErrors.notes"
+                                class="mt-1 text-xs text-red-500 font-medium"
+                            >
+                                {{ formErrors.notes[0] }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100"
+                    >
+                        <button
+                            type="button"
+                            @click="closeModal"
+                            class="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            class="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-lg text-sm font-bold transition-all shadow-sm active:scale-95"
+                        >
+                            Save Contact
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
