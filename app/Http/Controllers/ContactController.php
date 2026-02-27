@@ -19,7 +19,7 @@ class ContactController extends Controller
 
         $contacts = Contact::query()
         ->where('user_id', $request->user()->id)
-        ->when($request->query('search'), function ($query, $search) {
+        ->when($request->query('q'), function ($query, $search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")

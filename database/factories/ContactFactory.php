@@ -24,7 +24,8 @@ class ContactFactory extends Factory
             'phone' => $this->faker->phoneNumber,
             'company' => $this->faker->company,
             'tags' => fake()->randomElements(['cliente', 'proveedor', 'urgente', 'nuevo'], 2),
-            'notes' => $this->faker->text,
+            'notes' => $this->faker->text(100),
+            'created_at' => $this->faker->dateTimeBetween('-1 year', 'now'),
         ];
     }
 }
