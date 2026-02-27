@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import AdminLayout from "@/layouts/AdminLayout.vue";
+import ContactPagination from "@/components/ContactPagination.vue";
+import ContactFormModal from "@/components/ContactFormModal.vue";
+import { useContacts } from "@/composables/useContacts";
+import { useContactCrud } from "@/composables/useContactCrud";
+import { formatDate } from "@/utils";
 import {
     PlusIcon,
     SearchIcon,
@@ -7,11 +13,6 @@ import {
     ArrowUpIcon,
     ArrowDownIcon,
 } from "lucide-vue-next";
-import AdminLayout from "@/layouts/AdminLayout.vue";
-import ContactPagination from "@/components/ContactPagination.vue";
-import ContactFormModal from "@/components/ContactFormModal.vue";
-import { useContacts } from "@/composables/useContacts";
-import { useContactCrud } from "@/composables/useContactCrud";
 
 const {
     searchQuery,
@@ -34,16 +35,6 @@ const {
     saveContact,
     deleteContact,
 } = useContactCrud(fetchContacts);
-
-const formatDate = (dateString?: string) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("es-MX", {
-        year: "numeric",
-        month: "numeric",
-        day: "numeric",
-    });
-};
 </script>
 
 <template>
